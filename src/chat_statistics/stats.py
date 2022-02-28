@@ -1,12 +1,13 @@
 
 import json
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Union
 
 import arabic_reshaper
 import matplotlib.pyplot as plt
 from bidi.algorithm import get_display
-from hazm import Normalizer, word_tokenize
+from hazm import Normalizer, sent_tokenize, word_tokenize
 from src.data import DATA_DIR
 from wordcloud import WordCloud
 
@@ -45,7 +46,67 @@ class ChatStatistics:
         text_content = list(filter(lambda item : item not in stop_words, text_tokenize))
         return ''.join(text_content)
 
+    @staticmethod                   
+    def rebuild_text(mylist: list):
+        """conver list of texts to a new string
 
+        Args:
+            mylist: list of texts
+
+        Returns:
+            text: return new text
+        """
+        msg_text = ''
+        for item in mylist:
+            if 'text' in item and isinstance(item, dict):
+                msg_text += item['text']
+            elif isinstance(item, str):
+                msg_text += item
+        return msg_text
+
+    def msg_has_question(self, msg: str):
+        """detect a sentence has question or not
+
+        Args:
+            messages (_type_): _description_
+        """
+        
+        if not isinstance(msg['text'], str):
+            msg['text'] = self.rebuild_text(msg['text'])
+                
+        sentences = sent_tokenize(msg['text'])
+        for sentence in sentences:
+            if ('?' in sentence) or ('؟' in sentence):
+                return True
+                
+        return False
+                
+    def get_top_users(self, top_n: int=10):
+        """Return top_n active users from a chat
+
+        Args:
+            top_n: number of top users. Defualt to 10
+
+        Returns:
+            dict: top_n users
+        """
+        # chech if a message is question or not
+        is_question = defaultdict(bool)
+        for msg in self.json_chat['messages']:
+            is_question[msg['id']] = self.msg_has_question(msg)
+
+        # check users who answer the questions
+        users = []
+        for msg in self.json_chat['messages']:
+            if not msg.get('reply_to_message_id'):
+                continue
+                
+            # users[msg['from_id']].append(msg['reply_to_message_id'])
+            if is_question[msg['reply_to_message_id']] is False:
+                continue
+            users.append(msg['from'])
+        return dict(Counter(users).most_common(top_n))
+        
     def genrate_word_cloud(self, output_file: Union[Path, str]):
         """generate a word cloud by json file
 
@@ -78,6 +139,7 @@ class ChatStatistics:
 
 
 if __name__ == '__main__':
-    test = ChatStatistics(json_chat=DATA_DIR / 'parisa.json')
-    test.genrate_word_cloud(DATA_DIR)
+    test = ChatStatistics(json_chat=DATA_DIR / 'python_gp.json')
+    # test.genrate_word_cloud(DATA_DIR)
+    print(test.get_top_users())
     print('done')
